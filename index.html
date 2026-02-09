@@ -1,4 +1,3 @@
-<!-- index.html : WIOA Eligibility Checklist Tool (GitHub Pages-ready) -->
 <!doctype html>
 <html lang="en">
   <head>
@@ -13,7 +12,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 
-    <!-- Babel (for in-browser JSX) -->
+    <!-- Babel (in-browser JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
@@ -29,7 +28,7 @@
   <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script type="text/babel" data-presets="env,react">
       const { useEffect, useMemo, useRef, useState } = React;
 
       // -----------------------------
@@ -67,10 +66,9 @@
       };
 
       // -----------------------------
-      // Default template from PDF (page 1)
+      // Default template (based on your pasted checklist content)
       // -----------------------------
       function defaultTemplateFromPdf() {
-        // Source: attached PDF, page 1. :contentReference[oaicite:1]{index=1}
         return {
           version: 2,
           updatedAt: nowLocalISO(),
@@ -191,14 +189,14 @@
       }
 
       // -----------------------------
-      // Flatten helpers (for progress, run state)
+      // Flatten helpers
       // -----------------------------
       function flattenItems(template) {
         const out = [];
         const walk = (items, sectionId) => {
-          items
+          (items || [])
             .slice()
-            .sort((a,b)=>a.order-b.order)
+            .sort((a,b)=> (a.order||0)-(b.order||0))
             .forEach((it) => {
               out.push({ ...it, sectionId });
               if (Array.isArray(it.subitems) && it.subitems.length) {
@@ -206,10 +204,12 @@
               }
             });
         };
-        template.sections
+
+        (template.sections || [])
           .slice()
-          .sort((a,b)=>a.order-b.order)
+          .sort((a,b)=> (a.order||0)-(b.order||0))
           .forEach((sec) => walk(sec.items || [], sec.id));
+
         return out;
       }
 
@@ -262,11 +262,12 @@
         depth = 0,
       }) {
         const state = runState.itemState[item.id] || { checked: false, notes: "" };
-
         const isCheckbox = item.type !== "info";
         const countsTowardCompletion = item.type === "required";
 
-        const relatedFaqs = (faqIndexByItemId[item.id] || []).map(fid => allFaqs.find(f=>f.id===fid)).filter(Boolean);
+        const relatedFaqs = (faqIndexByItemId[item.id] || [])
+          .map(fid => allFaqs.find(f=>f.id===fid))
+          .filter(Boolean);
 
         return (
           <div className={"rounded-xl " + (depth ? "ml-6 border border-slate-100 bg-slate-50 p-3" : "")}>
@@ -341,7 +342,7 @@
                 <div className={(depth ? "" : "pl-7") + " mt-1 space-y-2"}>
                   {item.subitems
                     .slice()
-                    .sort((a,b)=>a.order-b.order)
+                    .sort((a,b)=> (a.order||0)-(b.order||0))
                     .map((sub) => (
                       <ItemRow
                         key={sub.id}
@@ -362,6 +363,9 @@
       }
 
       function App() {
+        // -----------------------------
+        // ALL HOOKS DECLARED FIRST (no conditional hooks)
+        // -----------------------------
         const [activeTab, setActiveTab] = useState("Checklist");
 
         const [template, setTemplate] = useState(null);
@@ -372,15 +376,21 @@
         const [importErrors, setImportErrors] = useState([]);
         const fileInputRef = useRef(null);
 
-        // Load initial state
+        const [expandedSections, setExpandedSections] = useState({});
+        const [showGuidance, setShowGuidance] = useState(true);
+        const [faqSearch, setFaqSearch] = useState("");
+
+        // -----------------------------
+        // Effects
+        // -----------------------------
         useEffect(() => {
           const tRaw = localStorage.getItem(LS_TEMPLATE);
           const rRaw = localStorage.getItem(LS_RUNSTATE);
           const fRaw = localStorage.getItem(LS_FAQ);
 
-          let t = tRaw ? safeJsonParse(tRaw) : null;
-          let r = rRaw ? safeJsonParse(rRaw) : null;
-          let f = fRaw ? safeJsonParse(fRaw) : null;
+          const t = tRaw ? safeJsonParse(tRaw) : null;
+          const r = rRaw ? safeJsonParse(rRaw) : null;
+          const f = fRaw ? safeJsonParse(fRaw) : null;
 
           const tVal = (t && t.ok) ? t.value : null;
           const rVal = (r && r.ok) ? r.value : null;
@@ -404,33 +414,61 @@
             if (!patchedItemState[it.id]) patchedItemState[it.id] = { checked: false, notes: "" };
           });
 
-          const patchedRun = { ...initialRun, itemState: patchedItemState };
-
           setTemplate(initialTemplate);
           setFaq(initialFaq);
-          setRunState(patchedRun);
+          setRunState({ ...initialRun, itemState: patchedItemState });
         }, []);
 
-        // Persist
         useEffect(() => {
-          if (template) localStorage.setItem(LS_TEMPLATE, JSON.stringify({ ...template, updatedAt: nowLocalISO() }, null, 2));
+          if (template) {
+            localStorage.setItem(LS_TEMPLATE, JSON.stringify({ ...template, updatedAt: nowLocalISO() }, null, 2));
+          }
         }, [template]);
 
         useEffect(() => {
-          if (faq) localStorage.setItem(LS_FAQ, JSON.stringify({ ...faq, updatedAt: nowLocalISO() }, null, 2));
+          if (faq) {
+            localStorage.setItem(LS_FAQ, JSON.stringify({ ...faq, updatedAt: nowLocalISO() }, null, 2));
+          }
         }, [faq]);
 
         useEffect(() => {
-          if (runState) localStorage.setItem(LS_RUNSTATE, JSON.stringify({ ...runState, updatedAt: nowLocalISO() }, null, 2));
+          if (runState) {
+            localStorage.setItem(LS_RUNSTATE, JSON.stringify({ ...runState, updatedAt: nowLocalISO() }, null, 2));
+          }
         }, [runState]);
 
+        // Init expanded sections when template loads/changes
+        useEffect(() => {
+          if (!template) return;
+          const init = {};
+          (template.sections || []).forEach(s => { init[s.id] = true; });
+          setExpandedSections(init);
+        }, [template]);
+
+        // Ensure runState has keys for any new items
+        useEffect(() => {
+          if (!template || !runState) return;
+          const flat = flattenItems(template);
+          const patched = { ...(runState.itemState || {}) };
+          let changed = false;
+          flat.forEach(it => {
+            if (!patched[it.id]) {
+              patched[it.id] = { checked: false, notes: "" };
+              changed = true;
+            }
+          });
+          if (changed) setRunState(prev => ({ ...prev, itemState: patched }));
+        }, [template, runState]);
+
+        // -----------------------------
+        // Memos (safe before return)
+        // -----------------------------
         const allFlatItems = useMemo(() => (template ? flattenItems(template) : []), [template]);
 
-        // Build FAQ index by relatedItemIds
         const faqIndexByItemId = useMemo(() => {
           const idx = {};
           if (!faq?.faqs) return idx;
-          faq.faqs.forEach((f) => {
+          (faq.faqs || []).forEach((f) => {
             (f.relatedItemIds || []).forEach((iid) => {
               if (!idx[iid]) idx[iid] = [];
               idx[iid].push(f.id);
@@ -439,16 +477,16 @@
           return idx;
         }, [faq]);
 
-        // Completion metrics (required only)
         const progress = useMemo(() => {
           if (!template || !runState) return { done: 0, total: 0, pct: 0, bySection: {} };
+
           const requiredIds = allFlatItems.filter(it => it.type === "required").map(it => it.id);
           const total = requiredIds.length;
           const done = requiredIds.filter(id => runState.itemState?.[id]?.checked).length;
           const pct = total ? Math.round((done / total) * 100) : 0;
 
           const bySection = {};
-          template.sections.forEach(sec => {
+          (template.sections || []).forEach(sec => {
             const secItems = flattenItems({ sections: [sec] });
             const secRequired = secItems.filter(it => it.type === "required").map(it => it.id);
             const secTotal = secRequired.length;
@@ -459,9 +497,22 @@
           return { done, total, pct, bySection };
         }, [template, runState, allFlatItems]);
 
-        // Reset run state (keep template/FAQ)
+        // -----------------------------
+        // Conditional render AFTER hooks
+        // -----------------------------
+        if (!template || !runState || !faq) {
+          return <div className="p-6 text-sm text-slate-700">Loading…</div>;
+        }
+
+        // -----------------------------
+        // Helpers (non-hooks)
+        // -----------------------------
+        const sortSections = (sections) => (sections || []).slice().sort((a,b)=> (a.order||0)-(b.order||0));
+        const sortFaqs = (faqs) => (faqs || []).slice().sort((a,b)=> (a.order||0)-(b.order||0));
+
+        const sectionsSorted = sortSections(template.sections);
+
         const resetRun = () => {
-          if (!template) return;
           const flat = flattenItems(template);
           setRunState({
             version: 2,
@@ -471,24 +522,22 @@
           });
         };
 
-        // Template editing helpers
-        const sortSections = (sections) => sections.slice().sort((a,b)=>a.order-b.order);
-
+        // Template editor helpers
         const updateSection = (sectionId, patch) => {
           setTemplate((prev) => ({
             ...prev,
-            sections: prev.sections.map(s => (s.id === sectionId ? { ...s, ...patch } : s)),
+            sections: (prev.sections || []).map(s => (s.id === sectionId ? { ...s, ...patch } : s)),
           }));
         };
 
         const addSection = () => {
-          const maxOrder = Math.max(0, ...(template.sections || []).map(s => s.order || 0));
+          const maxOrder = Math.max(0, ...((template.sections || []).map(s => s.order || 0)));
           const newSec = { id: uid(), title: "New Section", order: maxOrder + 1, items: [] };
-          setTemplate((prev) => ({ ...prev, sections: [...prev.sections, newSec] }));
+          setTemplate(prev => ({ ...prev, sections: [...(prev.sections || []), newSec] }));
         };
 
         const deleteSection = (sectionId) => {
-          setTemplate((prev) => ({ ...prev, sections: prev.sections.filter(s => s.id !== sectionId) }));
+          setTemplate(prev => ({ ...prev, sections: (prev.sections || []).filter(s => s.id !== sectionId) }));
         };
 
         const moveSection = (sectionId, dir) => {
@@ -496,20 +545,23 @@
           const idx = secs.findIndex(s => s.id === sectionId);
           const swapIdx = dir === "up" ? idx - 1 : idx + 1;
           if (idx < 0 || swapIdx < 0 || swapIdx >= secs.length) return;
+
           const a = secs[idx], b = secs[swapIdx];
-          const newSecs = template.sections.map(s => {
-            if (s.id === a.id) return { ...s, order: b.order };
-            if (s.id === b.id) return { ...s, order: a.order };
-            return s;
-          });
-          setTemplate((prev) => ({ ...prev, sections: newSecs }));
+          setTemplate(prev => ({
+            ...prev,
+            sections: (prev.sections || []).map(s => {
+              if (s.id === a.id) return { ...s, order: b.order };
+              if (s.id === b.id) return { ...s, order: a.order };
+              return s;
+            }),
+          }));
         };
 
         const addItemToSection = (sectionId) => {
-          setTemplate((prev) => {
-            const secs = prev.sections.map((s) => {
+          setTemplate(prev => {
+            const secs = (prev.sections || []).map(s => {
               if (s.id !== sectionId) return s;
-              const maxOrder = Math.max(0, ...(s.items || []).map(i => i.order || 0));
+              const maxOrder = Math.max(0, ...((s.items || []).map(i => i.order || 0)));
               const newItem = { id: uid(), text: "New item", order: maxOrder + 1, type: "required", guidance: "", subitems: [] };
               return { ...s, items: [...(s.items || []), newItem] };
             });
@@ -518,13 +570,12 @@
         };
 
         const deleteItem = (sectionId, itemId, parentItemId=null) => {
-          setTemplate((prev) => {
-            const secs = prev.sections.map((s) => {
+          setTemplate(prev => {
+            const secs = (prev.sections || []).map(s => {
               if (s.id !== sectionId) return s;
               if (!parentItemId) {
                 return { ...s, items: (s.items || []).filter(i => i.id !== itemId) };
               }
-              // delete subitem
               const items = (s.items || []).map(i => {
                 if (i.id !== parentItemId) return i;
                 return { ...i, subitems: (i.subitems || []).filter(si => si.id !== itemId) };
@@ -536,10 +587,10 @@
         };
 
         const updateItem = (sectionId, itemId, patch, parentItemId=null) => {
-          setTemplate((prev) => {
-            const secs = prev.sections.map((s) => {
+          setTemplate(prev => {
+            const secs = (prev.sections || []).map(s => {
               if (s.id !== sectionId) return s;
-              const items = (s.items || []).map((i) => {
+              const items = (s.items || []).map(i => {
                 if (!parentItemId && i.id === itemId) return { ...i, ...patch };
                 if (parentItemId && i.id === parentItemId) {
                   const subitems = (i.subitems || []).map(si => (si.id === itemId ? { ...si, ...patch } : si));
@@ -554,11 +605,14 @@
         };
 
         const moveItem = (sectionId, itemId, dir, parentItemId=null) => {
-          setTemplate((prev) => {
-            const secs = prev.sections.map((s) => {
+          setTemplate(prev => {
+            const secs = (prev.sections || []).map(s => {
               if (s.id !== sectionId) return s;
-              const list = !parentItemId ? (s.items || []) : ((s.items || []).find(i=>i.id===parentItemId)?.subitems || []);
-              const sorted = list.slice().sort((a,b)=>a.order-b.order);
+              const list = !parentItemId
+                ? (s.items || [])
+                : ((s.items || []).find(i=>i.id===parentItemId)?.subitems || []);
+
+              const sorted = list.slice().sort((a,b)=> (a.order||0)-(b.order||0));
               const idx = sorted.findIndex(i => i.id === itemId);
               const swapIdx = dir === "up" ? idx - 1 : idx + 1;
               if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return s;
@@ -590,12 +644,12 @@
         };
 
         const addSubItem = (sectionId, parentItemId) => {
-          setTemplate((prev) => {
-            const secs = prev.sections.map((s) => {
+          setTemplate(prev => {
+            const secs = (prev.sections || []).map(s => {
               if (s.id !== sectionId) return s;
-              const items = (s.items || []).map((i) => {
+              const items = (s.items || []).map(i => {
                 if (i.id !== parentItemId) return i;
-                const maxOrder = Math.max(0, ...(i.subitems || []).map(si => si.order || 0));
+                const maxOrder = Math.max(0, ...((i.subitems || []).map(si => si.order || 0)));
                 const newSub = { id: uid(), text: "New sub-item", order: maxOrder + 1, type: "required", guidance: "", subitems: [] };
                 return { ...i, subitems: [...(i.subitems || []), newSub] };
               });
@@ -605,36 +659,19 @@
           });
         };
 
-        // When template changes (new items), ensure runState has keys
-        useEffect(() => {
-          if (!template || !runState) return;
-          const flat = flattenItems(template);
-          const patched = { ...(runState.itemState || {}) };
-          let changed = false;
-          flat.forEach(it => {
-            if (!patched[it.id]) {
-              patched[it.id] = { checked: false, notes: "" };
-              changed = true;
-            }
-          });
-          if (changed) setRunState((prev) => ({ ...prev, itemState: patched }));
-        }, [template]);
-
-        // FAQ edit helpers
-        const sortFaqs = (faqs) => faqs.slice().sort((a,b)=>a.order-b.order);
-
+        // FAQ helpers
         const addFaq = () => {
-          const maxOrder = Math.max(0, ...(faq.faqs || []).map(f => f.order || 0));
+          const maxOrder = Math.max(0, ...((faq.faqs || []).map(f => f.order || 0)));
           const newF = { id: uid(), order: maxOrder + 1, question: "New question", answer: "New answer", relatedItemIds: [] };
-          setFaq((prev) => ({ ...prev, faqs: [...prev.faqs, newF] }));
+          setFaq(prev => ({ ...prev, faqs: [...(prev.faqs || []), newF] }));
         };
 
         const updateFaq = (faqId, patch) => {
-          setFaq((prev) => ({ ...prev, faqs: prev.faqs.map(f => (f.id === faqId ? { ...f, ...patch } : f)) }));
+          setFaq(prev => ({ ...prev, faqs: (prev.faqs || []).map(f => (f.id === faqId ? { ...f, ...patch } : f)) }));
         };
 
         const deleteFaq = (faqId) => {
-          setFaq((prev) => ({ ...prev, faqs: prev.faqs.filter(f => f.id !== faqId) }));
+          setFaq(prev => ({ ...prev, faqs: (prev.faqs || []).filter(f => f.id !== faqId) }));
         };
 
         const moveFaq = (faqId, dir) => {
@@ -642,10 +679,11 @@
           const idx = fs.findIndex(f => f.id === faqId);
           const swapIdx = dir === "up" ? idx - 1 : idx + 1;
           if (idx < 0 || swapIdx < 0 || swapIdx >= fs.length) return;
+
           const a = fs[idx], b = fs[swapIdx];
-          setFaq((prev) => ({
+          setFaq(prev => ({
             ...prev,
-            faqs: prev.faqs.map(f => {
+            faqs: (prev.faqs || []).map(f => {
               if (f.id === a.id) return { ...f, order: b.order };
               if (f.id === b.id) return { ...f, order: a.order };
               return f;
@@ -661,15 +699,10 @@
 
         const doImport = (text) => {
           const parsed = safeJsonParse(text);
-          if (!parsed.ok) {
-            setImportErrors(["Invalid JSON: " + parsed.error]);
-            return;
-          }
+          if (!parsed.ok) { setImportErrors(["Invalid JSON: " + parsed.error]); return; }
+
           const errs = validateBundle(parsed.value);
-          if (errs.length) {
-            setImportErrors(errs);
-            return;
-          }
+          if (errs.length) { setImportErrors(errs); return; }
 
           if (parsed.value.template) setTemplate(parsed.value.template);
           if (parsed.value.runState) setRunState(parsed.value.runState);
@@ -688,32 +721,13 @@
           reader.readAsText(file);
         };
 
-        // Checklist view state
-        const [expandedSections, setExpandedSections] = useState({});
-        const [showGuidance, setShowGuidance] = useState(true);
-
-        useEffect(() => {
-          if (!template) return;
-          const init = {};
-          (template.sections || []).forEach(s => { init[s.id] = true; });
-          setExpandedSections(init);
-        }, [template]);
-
-        if (!template || !runState || !faq) {
-          return <div className="p-6 text-sm text-slate-700">Loading…</div>;
-        }
-
-        const sectionsSorted = template.sections.slice().sort((a,b)=>a.order-b.order);
-
-        // FAQ search
-        const [faqSearch, setFaqSearch] = useState("");
+        // Derived FAQ view
         const faqsFiltered = sortFaqs(faq.faqs).filter((f) => {
           const q = (faqSearch || "").toLowerCase();
           if (!q) return true;
           return (f.question || "").toLowerCase().includes(q) || (f.answer || "").toLowerCase().includes(q);
         });
 
-        // Print trigger
         const printNow = () => window.print();
 
         return (
@@ -722,9 +736,7 @@
             <div className="no-print mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-2xl font-bold">WIOA Eligibility Checklist Tool</div>
-                <div className="text-sm text-slate-600">
-                  Local-only (localStorage). Default checklist based on attached PDF page 1.
-                </div>
+                <div className="text-sm text-slate-600">Local-only (localStorage).</div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <TabButton active={activeTab==="Checklist"} onClick={()=>setActiveTab("Checklist")}>Checklist</TabButton>
@@ -746,7 +758,6 @@
               <hr className="my-3 border-slate-300" />
             </div>
 
-            {/* Content */}
             {activeTab === "Checklist" ? (
               <div className="space-y-4">
                 <SectionCard
@@ -823,7 +834,7 @@
                         <div className="space-y-3">
                           {(sec.items || [])
                             .slice()
-                            .sort((a,b)=>a.order-b.order)
+                            .sort((a,b)=> (a.order||0)-(b.order||0))
                             .map((item) => (
                               <ItemRow
                                 key={item.id}
@@ -832,7 +843,7 @@
                                 setRunState={setRunState}
                                 showGuidance={showGuidance}
                                 faqIndexByItemId={faqIndexByItemId}
-                                allFaqs={faq.faqs}
+                                allFaqs={faq.faqs || []}
                               />
                             ))}
                         </div>
@@ -885,36 +896,6 @@
                               value={f.answer || ""}
                               onChange={(e)=>updateFaq(f.id, { answer: e.target.value })}
                             />
-
-                            <div className="mt-3">
-                              <label className="text-xs font-semibold text-slate-600">Related checklist items (optional)</label>
-                              <div className="mt-1 grid gap-2 md:grid-cols-2">
-                                {allFlatItems
-                                  .filter(it => it.type !== "info")
-                                  .slice(0, 40)
-                                  .map((it) => {
-                                    const checked = (f.relatedItemIds || []).includes(it.id);
-                                    return (
-                                      <label key={it.id} className="flex items-center gap-2 text-sm text-slate-700">
-                                        <input
-                                          type="checkbox"
-                                          checked={checked}
-                                          onChange={(e) => {
-                                            const next = new Set(f.relatedItemIds || []);
-                                            if (e.target.checked) next.add(it.id);
-                                            else next.delete(it.id);
-                                            updateFaq(f.id, { relatedItemIds: Array.from(next) });
-                                          }}
-                                        />
-                                        <span className="truncate">{it.text}</span>
-                                      </label>
-                                    );
-                                  })}
-                              </div>
-                              <div className="mt-2 text-xs text-slate-500">
-                                Note: only the first 40 items show here to keep the UI fast. Use Export/Import if you want bulk editing.
-                              </div>
-                            </div>
                           </div>
 
                           <div className="no-print flex flex-col gap-2">
@@ -972,7 +953,7 @@
                         <div className="mt-4 space-y-3">
                           {(sec.items || [])
                             .slice()
-                            .sort((a,b)=>a.order-b.order)
+                            .sort((a,b)=> (a.order||0)-(b.order||0))
                             .map((it) => (
                               <div key={it.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -998,7 +979,7 @@
                                         </select>
                                       </div>
                                       <div>
-                                        <label className="text-xs font-semibold text-slate-600">Guidance (expand text)</label>
+                                        <label className="text-xs font-semibold text-slate-600">Guidance</label>
                                         <textarea
                                           className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
                                           rows="2"
@@ -1023,7 +1004,7 @@
                                         <div className="mt-2 space-y-2">
                                           {it.subitems
                                             .slice()
-                                            .sort((a,b)=>a.order-b.order)
+                                            .sort((a,b)=> (a.order||0)-(b.order||0))
                                             .map((si) => (
                                               <div key={si.id} className="rounded-xl border border-slate-200 bg-white p-3">
                                                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -1181,7 +1162,7 @@
                   }
                 >
                   <div className="text-sm text-slate-700">
-                    Use the button to open the browser print dialog. The printout includes checkmarks and notes.
+                    Use the button to open the browser print dialog.
                   </div>
                   <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                     Print includes:
@@ -1194,7 +1175,6 @@
               </div>
             ) : null}
 
-            {/* Footer */}
             <div className="no-print mt-8 text-xs text-slate-500">
               Local-only tool. Data stays in this browser via localStorage.
             </div>
