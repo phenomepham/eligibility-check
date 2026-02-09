@@ -1,0 +1,1208 @@
+<!-- index.html : WIOA Eligibility Checklist Tool (GitHub Pages-ready) -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>WIOA Eligibility Checklist Tool</title>
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React 18 UMD -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel (for in-browser JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+      @media print {
+        .no-print { display: none !important; }
+        .print-only { display: block !important; }
+        body { background: white !important; }
+      }
+      .print-only { display: none; }
+    </style>
+  </head>
+
+  <body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useEffect, useMemo, useRef, useState } = React;
+
+      // -----------------------------
+      // Storage keys
+      // -----------------------------
+      const LS_TEMPLATE = "wioaChecklistTemplate_v2";
+      const LS_RUNSTATE = "wioaChecklistRunState_v2";
+      const LS_FAQ = "wioaFaq_v2";
+
+      // -----------------------------
+      // Utilities
+      // -----------------------------
+      const uid = () =>
+        (crypto?.randomUUID?.() || ("id_" + Math.random().toString(16).slice(2) + Date.now()));
+
+      const safeJsonParse = (s) => {
+        try { return { ok: true, value: JSON.parse(s) }; }
+        catch (e) { return { ok: false, error: String(e) }; }
+      };
+
+      const downloadText = (filename, text) => {
+        const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const nowLocalISO = () => {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+
+      // -----------------------------
+      // Default template from PDF (page 1)
+      // -----------------------------
+      function defaultTemplateFromPdf() {
+        // Source: attached PDF, page 1. :contentReference[oaicite:1]{index=1}
+        return {
+          version: 2,
+          updatedAt: nowLocalISO(),
+          sections: [
+            {
+              id: uid(),
+              title: "WIOA Application in NEworks",
+              order: 1,
+              items: [
+                { id: uid(), text: "WIOA Application completed in NEworks", order: 1, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "WIOA Application printed", order: 2, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "WIOA Application signed by Career Navigator and Participant", order: 3, type: "required", guidance: "", subitems: [] },
+                {
+                  id: uid(),
+                  text: "Most commonly missed sections:",
+                  order: 4,
+                  type: "info",
+                  guidance: "Use this as a quick audit list before printing/signing.",
+                  subitems: [
+                    { id: uid(), text: "Alternate contacts added", order: 1, type: "required", guidance: "", subitems: [] },
+                    { id: uid(), text: "Add Employment history (if none auto-populates)", order: 2, type: "required", guidance: "", subitems: [] },
+                    { id: uid(), text: "Occupational code entered", order: 3, type: "required", guidance: "", subitems: [] },
+                    { id: uid(), text: "Hourly wage entered", order: 4, type: "required", guidance: "", subitems: [] },
+                  ],
+                },
+              ],
+            },
+            {
+              id: uid(),
+              title: "Case Note",
+              order: 2,
+              items: [
+                { id: uid(), text: "Case note entered (See Case Note Templates)", order: 1, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Subject line used: Eligibility Interview", order: 2, type: "required", guidance: "", subitems: [] },
+              ],
+            },
+            {
+              id: uid(),
+              title: "Eligibility Packet (Complete & Organized)",
+              order: 3,
+              items: [
+                { id: uid(), text: "WIOA Application", order: 1, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "U.S. Citizen Attestation", order: 2, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Follow-Up Agreement", order: 3, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "SSN Disclosure", order: 4, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "EEO Form", order: 5, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Consent and Waiver Release", order: 6, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Release of Information", order: 7, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Self-Attestation", order: 8, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Interest Assessment", order: 9, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Skills Matcher", order: 10, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Legible color copies of I-9 documentation", order: 11, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "SNAP Verification Letter OR six (6) months of paystubs", order: 12, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "NRRC Results (if using BSD to determine eligibility)", order: 13, type: "required", guidance: "", subitems: [] },
+              ],
+            },
+            {
+              id: uid(),
+              title: "Submission",
+              order: 4,
+              items: [
+                { id: uid(), text: "Eligibility packet reviewed for completeness", order: 1, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Cover sheet attached", order: 2, type: "required", guidance: "", subitems: [] },
+                { id: uid(), text: "Entire packet submitted to Program Manager", order: 3, type: "required", guidance: "", subitems: [] },
+              ],
+            },
+          ],
+        };
+      }
+
+      function defaultFaq() {
+        return {
+          version: 1,
+          updatedAt: nowLocalISO(),
+          faqs: [
+            {
+              id: uid(),
+              order: 1,
+              question: "What do we use if the participant cannot provide paystubs?",
+              answer: "Use the allowable alternative listed on your checklist (e.g., SNAP verification letter) or follow local policy for acceptable income documentation.",
+              relatedItemIds: [],
+            },
+            {
+              id: uid(),
+              order: 2,
+              question: "What does “Most commonly missed sections” mean?",
+              answer: "It is an audit list. The interview can be done, but the application often fails review if those fields are blank.",
+              relatedItemIds: [],
+            },
+          ],
+        };
+      }
+
+      // -----------------------------
+      // Validation (import)
+      // -----------------------------
+      function validateBundle(bundle) {
+        const errors = [];
+        if (!bundle || typeof bundle !== "object") return ["Import is not an object."];
+
+        if (bundle.template) {
+          const t = bundle.template;
+          if (!Array.isArray(t.sections)) errors.push("template.sections must be an array.");
+        }
+        if (bundle.runState) {
+          const r = bundle.runState;
+          if (!r.participant || typeof r.participant !== "object") errors.push("runState.participant is missing.");
+          if (!r.itemState || typeof r.itemState !== "object") errors.push("runState.itemState is missing.");
+        }
+        if (bundle.faq) {
+          const f = bundle.faq;
+          if (!Array.isArray(f.faqs)) errors.push("faq.faqs must be an array.");
+        }
+        if (!bundle.template && !bundle.runState && !bundle.faq) {
+          errors.push("Nothing to import. Expected at least one of: template, runState, faq.");
+        }
+        return errors;
+      }
+
+      // -----------------------------
+      // Flatten helpers (for progress, run state)
+      // -----------------------------
+      function flattenItems(template) {
+        const out = [];
+        const walk = (items, sectionId) => {
+          items
+            .slice()
+            .sort((a,b)=>a.order-b.order)
+            .forEach((it) => {
+              out.push({ ...it, sectionId });
+              if (Array.isArray(it.subitems) && it.subitems.length) {
+                walk(it.subitems.map(s => ({...s})), sectionId);
+              }
+            });
+        };
+        template.sections
+          .slice()
+          .sort((a,b)=>a.order-b.order)
+          .forEach((sec) => walk(sec.items || [], sec.id));
+        return out;
+      }
+
+      // -----------------------------
+      // UI Components
+      // -----------------------------
+      function Pill({ children }) {
+        return (
+          <span className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700">
+            {children}
+          </span>
+        );
+      }
+
+      function TabButton({ active, onClick, children }) {
+        return (
+          <button
+            onClick={onClick}
+            className={
+              "no-print rounded-lg px-3 py-2 text-sm font-medium " +
+              (active
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-800 border border-slate-200 hover:bg-slate-100")
+            }
+          >
+            {children}
+          </button>
+        );
+      }
+
+      function SectionCard({ title, right, children }) {
+        return (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4">
+              <div className="text-base font-semibold">{title}</div>
+              <div className="flex items-center gap-2">{right}</div>
+            </div>
+            <div className="p-4">{children}</div>
+          </div>
+        );
+      }
+
+      function ItemRow({
+        item,
+        runState,
+        setRunState,
+        showGuidance,
+        faqIndexByItemId,
+        allFaqs,
+        depth = 0,
+      }) {
+        const state = runState.itemState[item.id] || { checked: false, notes: "" };
+
+        const isCheckbox = item.type !== "info";
+        const countsTowardCompletion = item.type === "required";
+
+        const relatedFaqs = (faqIndexByItemId[item.id] || []).map(fid => allFaqs.find(f=>f.id===fid)).filter(Boolean);
+
+        return (
+          <div className={"rounded-xl " + (depth ? "ml-6 border border-slate-100 bg-slate-50 p-3" : "")}>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start gap-3">
+                {isCheckbox ? (
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4"
+                    checked={!!state.checked}
+                    onChange={(e) => {
+                      setRunState((prev) => ({
+                        ...prev,
+                        itemState: {
+                          ...prev.itemState,
+                          [item.id]: { ...state, checked: e.target.checked },
+                        },
+                      }));
+                    }}
+                  />
+                ) : (
+                  <div className="mt-1 h-4 w-4 rounded border border-slate-300 bg-white" title="Info item (no checkbox)" />
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-medium">{item.text}</div>
+                    {item.type === "required" && <Pill>Required</Pill>}
+                    {item.type === "optional" && <Pill>Optional</Pill>}
+                    {item.type === "info" && <Pill>Info</Pill>}
+                    {isCheckbox && !countsTowardCompletion && <Pill>Not counted</Pill>}
+                  </div>
+
+                  {showGuidance && item.guidance ? (
+                    <div className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">{item.guidance}</div>
+                  ) : null}
+
+                  {relatedFaqs.length ? (
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="text-xs font-semibold text-slate-700">Related FAQ</div>
+                      <ul className="mt-1 space-y-1">
+                        {relatedFaqs.map((f) => (
+                          <li key={f.id} className="text-sm">
+                            <span className="font-medium">{f.question}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className={"grid gap-2 " + (depth ? "" : "pl-7")}>
+                <textarea
+                  className="w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                  rows="2"
+                  placeholder="Notes (optional)"
+                  value={state.notes || ""}
+                  onChange={(e) => {
+                    setRunState((prev) => ({
+                      ...prev,
+                      itemState: {
+                        ...prev.itemState,
+                        [item.id]: { ...state, notes: e.target.value },
+                      },
+                    }));
+                  }}
+                />
+              </div>
+
+              {Array.isArray(item.subitems) && item.subitems.length ? (
+                <div className={(depth ? "" : "pl-7") + " mt-1 space-y-2"}>
+                  {item.subitems
+                    .slice()
+                    .sort((a,b)=>a.order-b.order)
+                    .map((sub) => (
+                      <ItemRow
+                        key={sub.id}
+                        item={sub}
+                        runState={runState}
+                        setRunState={setRunState}
+                        showGuidance={showGuidance}
+                        faqIndexByItemId={faqIndexByItemId}
+                        allFaqs={allFaqs}
+                        depth={depth + 1}
+                      />
+                    ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      }
+
+      function App() {
+        const [activeTab, setActiveTab] = useState("Checklist");
+
+        const [template, setTemplate] = useState(null);
+        const [runState, setRunState] = useState(null);
+        const [faq, setFaq] = useState(null);
+
+        const [importText, setImportText] = useState("");
+        const [importErrors, setImportErrors] = useState([]);
+        const fileInputRef = useRef(null);
+
+        // Load initial state
+        useEffect(() => {
+          const tRaw = localStorage.getItem(LS_TEMPLATE);
+          const rRaw = localStorage.getItem(LS_RUNSTATE);
+          const fRaw = localStorage.getItem(LS_FAQ);
+
+          let t = tRaw ? safeJsonParse(tRaw) : null;
+          let r = rRaw ? safeJsonParse(rRaw) : null;
+          let f = fRaw ? safeJsonParse(fRaw) : null;
+
+          const tVal = (t && t.ok) ? t.value : null;
+          const rVal = (r && r.ok) ? r.value : null;
+          const fVal = (f && f.ok) ? f.value : null;
+
+          const initialTemplate = tVal || defaultTemplateFromPdf();
+          const initialFaq = fVal || defaultFaq();
+
+          const allItems = flattenItems(initialTemplate);
+
+          const initialRun = rVal || {
+            version: 2,
+            updatedAt: nowLocalISO(),
+            participant: { name: "", id: "", date: nowLocalISO() },
+            itemState: Object.fromEntries(allItems.map(it => [it.id, { checked: false, notes: "" }])),
+          };
+
+          // Ensure run state contains keys for any new items
+          const patchedItemState = { ...(initialRun.itemState || {}) };
+          allItems.forEach(it => {
+            if (!patchedItemState[it.id]) patchedItemState[it.id] = { checked: false, notes: "" };
+          });
+
+          const patchedRun = { ...initialRun, itemState: patchedItemState };
+
+          setTemplate(initialTemplate);
+          setFaq(initialFaq);
+          setRunState(patchedRun);
+        }, []);
+
+        // Persist
+        useEffect(() => {
+          if (template) localStorage.setItem(LS_TEMPLATE, JSON.stringify({ ...template, updatedAt: nowLocalISO() }, null, 2));
+        }, [template]);
+
+        useEffect(() => {
+          if (faq) localStorage.setItem(LS_FAQ, JSON.stringify({ ...faq, updatedAt: nowLocalISO() }, null, 2));
+        }, [faq]);
+
+        useEffect(() => {
+          if (runState) localStorage.setItem(LS_RUNSTATE, JSON.stringify({ ...runState, updatedAt: nowLocalISO() }, null, 2));
+        }, [runState]);
+
+        const allFlatItems = useMemo(() => (template ? flattenItems(template) : []), [template]);
+
+        // Build FAQ index by relatedItemIds
+        const faqIndexByItemId = useMemo(() => {
+          const idx = {};
+          if (!faq?.faqs) return idx;
+          faq.faqs.forEach((f) => {
+            (f.relatedItemIds || []).forEach((iid) => {
+              if (!idx[iid]) idx[iid] = [];
+              idx[iid].push(f.id);
+            });
+          });
+          return idx;
+        }, [faq]);
+
+        // Completion metrics (required only)
+        const progress = useMemo(() => {
+          if (!template || !runState) return { done: 0, total: 0, pct: 0, bySection: {} };
+          const requiredIds = allFlatItems.filter(it => it.type === "required").map(it => it.id);
+          const total = requiredIds.length;
+          const done = requiredIds.filter(id => runState.itemState?.[id]?.checked).length;
+          const pct = total ? Math.round((done / total) * 100) : 0;
+
+          const bySection = {};
+          template.sections.forEach(sec => {
+            const secItems = flattenItems({ sections: [sec] });
+            const secRequired = secItems.filter(it => it.type === "required").map(it => it.id);
+            const secTotal = secRequired.length;
+            const secDone = secRequired.filter(id => runState.itemState?.[id]?.checked).length;
+            bySection[sec.id] = { done: secDone, total: secTotal };
+          });
+
+          return { done, total, pct, bySection };
+        }, [template, runState, allFlatItems]);
+
+        // Reset run state (keep template/FAQ)
+        const resetRun = () => {
+          if (!template) return;
+          const flat = flattenItems(template);
+          setRunState({
+            version: 2,
+            updatedAt: nowLocalISO(),
+            participant: { name: "", id: "", date: nowLocalISO() },
+            itemState: Object.fromEntries(flat.map(it => [it.id, { checked: false, notes: "" }])),
+          });
+        };
+
+        // Template editing helpers
+        const sortSections = (sections) => sections.slice().sort((a,b)=>a.order-b.order);
+
+        const updateSection = (sectionId, patch) => {
+          setTemplate((prev) => ({
+            ...prev,
+            sections: prev.sections.map(s => (s.id === sectionId ? { ...s, ...patch } : s)),
+          }));
+        };
+
+        const addSection = () => {
+          const maxOrder = Math.max(0, ...(template.sections || []).map(s => s.order || 0));
+          const newSec = { id: uid(), title: "New Section", order: maxOrder + 1, items: [] };
+          setTemplate((prev) => ({ ...prev, sections: [...prev.sections, newSec] }));
+        };
+
+        const deleteSection = (sectionId) => {
+          setTemplate((prev) => ({ ...prev, sections: prev.sections.filter(s => s.id !== sectionId) }));
+        };
+
+        const moveSection = (sectionId, dir) => {
+          const secs = sortSections(template.sections);
+          const idx = secs.findIndex(s => s.id === sectionId);
+          const swapIdx = dir === "up" ? idx - 1 : idx + 1;
+          if (idx < 0 || swapIdx < 0 || swapIdx >= secs.length) return;
+          const a = secs[idx], b = secs[swapIdx];
+          const newSecs = template.sections.map(s => {
+            if (s.id === a.id) return { ...s, order: b.order };
+            if (s.id === b.id) return { ...s, order: a.order };
+            return s;
+          });
+          setTemplate((prev) => ({ ...prev, sections: newSecs }));
+        };
+
+        const addItemToSection = (sectionId) => {
+          setTemplate((prev) => {
+            const secs = prev.sections.map((s) => {
+              if (s.id !== sectionId) return s;
+              const maxOrder = Math.max(0, ...(s.items || []).map(i => i.order || 0));
+              const newItem = { id: uid(), text: "New item", order: maxOrder + 1, type: "required", guidance: "", subitems: [] };
+              return { ...s, items: [...(s.items || []), newItem] };
+            });
+            return { ...prev, sections: secs };
+          });
+        };
+
+        const deleteItem = (sectionId, itemId, parentItemId=null) => {
+          setTemplate((prev) => {
+            const secs = prev.sections.map((s) => {
+              if (s.id !== sectionId) return s;
+              if (!parentItemId) {
+                return { ...s, items: (s.items || []).filter(i => i.id !== itemId) };
+              }
+              // delete subitem
+              const items = (s.items || []).map(i => {
+                if (i.id !== parentItemId) return i;
+                return { ...i, subitems: (i.subitems || []).filter(si => si.id !== itemId) };
+              });
+              return { ...s, items };
+            });
+            return { ...prev, sections: secs };
+          });
+        };
+
+        const updateItem = (sectionId, itemId, patch, parentItemId=null) => {
+          setTemplate((prev) => {
+            const secs = prev.sections.map((s) => {
+              if (s.id !== sectionId) return s;
+              const items = (s.items || []).map((i) => {
+                if (!parentItemId && i.id === itemId) return { ...i, ...patch };
+                if (parentItemId && i.id === parentItemId) {
+                  const subitems = (i.subitems || []).map(si => (si.id === itemId ? { ...si, ...patch } : si));
+                  return { ...i, subitems };
+                }
+                return i;
+              });
+              return { ...s, items };
+            });
+            return { ...prev, sections: secs };
+          });
+        };
+
+        const moveItem = (sectionId, itemId, dir, parentItemId=null) => {
+          setTemplate((prev) => {
+            const secs = prev.sections.map((s) => {
+              if (s.id !== sectionId) return s;
+              const list = !parentItemId ? (s.items || []) : ((s.items || []).find(i=>i.id===parentItemId)?.subitems || []);
+              const sorted = list.slice().sort((a,b)=>a.order-b.order);
+              const idx = sorted.findIndex(i => i.id === itemId);
+              const swapIdx = dir === "up" ? idx - 1 : idx + 1;
+              if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return s;
+
+              const a = sorted[idx], b = sorted[swapIdx];
+
+              if (!parentItemId) {
+                const items = (s.items || []).map(i => {
+                  if (i.id === a.id) return { ...i, order: b.order };
+                  if (i.id === b.id) return { ...i, order: a.order };
+                  return i;
+                });
+                return { ...s, items };
+              } else {
+                const items = (s.items || []).map(i => {
+                  if (i.id !== parentItemId) return i;
+                  const subitems = (i.subitems || []).map(si => {
+                    if (si.id === a.id) return { ...si, order: b.order };
+                    if (si.id === b.id) return { ...si, order: a.order };
+                    return si;
+                  });
+                  return { ...i, subitems };
+                });
+                return { ...s, items };
+              }
+            });
+            return { ...prev, sections: secs };
+          });
+        };
+
+        const addSubItem = (sectionId, parentItemId) => {
+          setTemplate((prev) => {
+            const secs = prev.sections.map((s) => {
+              if (s.id !== sectionId) return s;
+              const items = (s.items || []).map((i) => {
+                if (i.id !== parentItemId) return i;
+                const maxOrder = Math.max(0, ...(i.subitems || []).map(si => si.order || 0));
+                const newSub = { id: uid(), text: "New sub-item", order: maxOrder + 1, type: "required", guidance: "", subitems: [] };
+                return { ...i, subitems: [...(i.subitems || []), newSub] };
+              });
+              return { ...s, items };
+            });
+            return { ...prev, sections: secs };
+          });
+        };
+
+        // When template changes (new items), ensure runState has keys
+        useEffect(() => {
+          if (!template || !runState) return;
+          const flat = flattenItems(template);
+          const patched = { ...(runState.itemState || {}) };
+          let changed = false;
+          flat.forEach(it => {
+            if (!patched[it.id]) {
+              patched[it.id] = { checked: false, notes: "" };
+              changed = true;
+            }
+          });
+          if (changed) setRunState((prev) => ({ ...prev, itemState: patched }));
+        }, [template]);
+
+        // FAQ edit helpers
+        const sortFaqs = (faqs) => faqs.slice().sort((a,b)=>a.order-b.order);
+
+        const addFaq = () => {
+          const maxOrder = Math.max(0, ...(faq.faqs || []).map(f => f.order || 0));
+          const newF = { id: uid(), order: maxOrder + 1, question: "New question", answer: "New answer", relatedItemIds: [] };
+          setFaq((prev) => ({ ...prev, faqs: [...prev.faqs, newF] }));
+        };
+
+        const updateFaq = (faqId, patch) => {
+          setFaq((prev) => ({ ...prev, faqs: prev.faqs.map(f => (f.id === faqId ? { ...f, ...patch } : f)) }));
+        };
+
+        const deleteFaq = (faqId) => {
+          setFaq((prev) => ({ ...prev, faqs: prev.faqs.filter(f => f.id !== faqId) }));
+        };
+
+        const moveFaq = (faqId, dir) => {
+          const fs = sortFaqs(faq.faqs);
+          const idx = fs.findIndex(f => f.id === faqId);
+          const swapIdx = dir === "up" ? idx - 1 : idx + 1;
+          if (idx < 0 || swapIdx < 0 || swapIdx >= fs.length) return;
+          const a = fs[idx], b = fs[swapIdx];
+          setFaq((prev) => ({
+            ...prev,
+            faqs: prev.faqs.map(f => {
+              if (f.id === a.id) return { ...f, order: b.order };
+              if (f.id === b.id) return { ...f, order: a.order };
+              return f;
+            }),
+          }));
+        };
+
+        // Import / Export
+        const exportAll = () => {
+          const bundle = { template, runState, faq };
+          downloadText("wioa_checklist_export.json", JSON.stringify(bundle, null, 2));
+        };
+
+        const doImport = (text) => {
+          const parsed = safeJsonParse(text);
+          if (!parsed.ok) {
+            setImportErrors(["Invalid JSON: " + parsed.error]);
+            return;
+          }
+          const errs = validateBundle(parsed.value);
+          if (errs.length) {
+            setImportErrors(errs);
+            return;
+          }
+
+          if (parsed.value.template) setTemplate(parsed.value.template);
+          if (parsed.value.runState) setRunState(parsed.value.runState);
+          if (parsed.value.faq) setFaq(parsed.value.faq);
+
+          setImportErrors([]);
+        };
+
+        const handleFilePick = (file) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const txt = String(reader.result || "");
+            setImportText(txt);
+            doImport(txt);
+          };
+          reader.readAsText(file);
+        };
+
+        // Checklist view state
+        const [expandedSections, setExpandedSections] = useState({});
+        const [showGuidance, setShowGuidance] = useState(true);
+
+        useEffect(() => {
+          if (!template) return;
+          const init = {};
+          (template.sections || []).forEach(s => { init[s.id] = true; });
+          setExpandedSections(init);
+        }, [template]);
+
+        if (!template || !runState || !faq) {
+          return <div className="p-6 text-sm text-slate-700">Loading…</div>;
+        }
+
+        const sectionsSorted = template.sections.slice().sort((a,b)=>a.order-b.order);
+
+        // FAQ search
+        const [faqSearch, setFaqSearch] = useState("");
+        const faqsFiltered = sortFaqs(faq.faqs).filter((f) => {
+          const q = (faqSearch || "").toLowerCase();
+          if (!q) return true;
+          return (f.question || "").toLowerCase().includes(q) || (f.answer || "").toLowerCase().includes(q);
+        });
+
+        // Print trigger
+        const printNow = () => window.print();
+
+        return (
+          <div className="mx-auto max-w-6xl p-4 md:p-8">
+            {/* Header */}
+            <div className="no-print mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-2xl font-bold">WIOA Eligibility Checklist Tool</div>
+                <div className="text-sm text-slate-600">
+                  Local-only (localStorage). Default checklist based on attached PDF page 1.
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <TabButton active={activeTab==="Checklist"} onClick={()=>setActiveTab("Checklist")}>Checklist</TabButton>
+                <TabButton active={activeTab==="FAQ"} onClick={()=>setActiveTab("FAQ")}>FAQ</TabButton>
+                <TabButton active={activeTab==="Edit Template"} onClick={()=>setActiveTab("Edit Template")}>Edit Template</TabButton>
+                <TabButton active={activeTab==="Import/Export"} onClick={()=>setActiveTab("Import/Export")}>Import/Export</TabButton>
+                <TabButton active={activeTab==="Print"} onClick={()=>setActiveTab("Print")}>Print</TabButton>
+              </div>
+            </div>
+
+            {/* Print-only header */}
+            <div className="print-only mb-4">
+              <div className="text-xl font-bold">WIOA Eligibility Checklist</div>
+              <div className="mt-1 text-sm">
+                <div><span className="font-semibold">Participant Name:</span> {runState.participant?.name || ""}</div>
+                <div><span className="font-semibold">Participant ID:</span> {runState.participant?.id || ""}</div>
+                <div><span className="font-semibold">Run Date:</span> {runState.participant?.date || ""}</div>
+              </div>
+              <hr className="my-3 border-slate-300" />
+            </div>
+
+            {/* Content */}
+            {activeTab === "Checklist" ? (
+              <div className="space-y-4">
+                <SectionCard
+                  title="Run Details"
+                  right={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Pill>{progress.done}/{progress.total} required</Pill>
+                      <Pill>{progress.pct}% complete</Pill>
+                      <button
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+                        onClick={() => setShowGuidance(v=>!v)}
+                      >
+                        {showGuidance ? "Hide Guidance" : "Show Guidance"}
+                      </button>
+                      <button
+                        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                        onClick={resetRun}
+                        title="Clears checks/notes; keeps template and FAQ"
+                      >
+                        Reset run
+                      </button>
+                    </div>
+                  }
+                >
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Participant Name</label>
+                      <input
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                        value={runState.participant?.name || ""}
+                        onChange={(e)=>setRunState(prev=>({ ...prev, participant: { ...prev.participant, name: e.target.value } }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Participant ID</label>
+                      <input
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                        value={runState.participant?.id || ""}
+                        onChange={(e)=>setRunState(prev=>({ ...prev, participant: { ...prev.participant, id: e.target.value } }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Date</label>
+                      <input
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                        value={runState.participant?.date || ""}
+                        onChange={(e)=>setRunState(prev=>({ ...prev, participant: { ...prev.participant, date: e.target.value } }))}
+                      />
+                    </div>
+                  </div>
+                </SectionCard>
+
+                {sectionsSorted.map((sec) => {
+                  const secProg = progress.bySection[sec.id] || { done: 0, total: 0 };
+                  const expanded = !!expandedSections[sec.id];
+
+                  return (
+                    <SectionCard
+                      key={sec.id}
+                      title={sec.title}
+                      right={
+                        <div className="flex items-center gap-2">
+                          <Pill>{secProg.done}/{secProg.total} required</Pill>
+                          <button
+                            className="no-print rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+                            onClick={() => setExpandedSections(prev => ({ ...prev, [sec.id]: !expanded }))}
+                          >
+                            {expanded ? "Collapse" : "Expand"}
+                          </button>
+                        </div>
+                      }
+                    >
+                      {expanded ? (
+                        <div className="space-y-3">
+                          {(sec.items || [])
+                            .slice()
+                            .sort((a,b)=>a.order-b.order)
+                            .map((item) => (
+                              <ItemRow
+                                key={item.id}
+                                item={item}
+                                runState={runState}
+                                setRunState={setRunState}
+                                showGuidance={showGuidance}
+                                faqIndexByItemId={faqIndexByItemId}
+                                allFaqs={faq.faqs}
+                              />
+                            ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-slate-600">Collapsed.</div>
+                      )}
+                    </SectionCard>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {activeTab === "FAQ" ? (
+              <div className="space-y-4">
+                <SectionCard
+                  title="FAQ"
+                  right={
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="w-64 rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                        placeholder="Search FAQ"
+                        value={faqSearch}
+                        onChange={(e)=>setFaqSearch(e.target.value)}
+                      />
+                      <button
+                        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                        onClick={addFaq}
+                      >
+                        Add FAQ
+                      </button>
+                    </div>
+                  }
+                >
+                  <div className="space-y-3">
+                    {faqsFiltered.map((f) => (
+                      <div key={f.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <label className="text-xs font-semibold text-slate-600">Question</label>
+                            <input
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                              value={f.question || ""}
+                              onChange={(e)=>updateFaq(f.id, { question: e.target.value })}
+                            />
+
+                            <label className="mt-3 block text-xs font-semibold text-slate-600">Answer</label>
+                            <textarea
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                              rows="3"
+                              value={f.answer || ""}
+                              onChange={(e)=>updateFaq(f.id, { answer: e.target.value })}
+                            />
+
+                            <div className="mt-3">
+                              <label className="text-xs font-semibold text-slate-600">Related checklist items (optional)</label>
+                              <div className="mt-1 grid gap-2 md:grid-cols-2">
+                                {allFlatItems
+                                  .filter(it => it.type !== "info")
+                                  .slice(0, 40)
+                                  .map((it) => {
+                                    const checked = (f.relatedItemIds || []).includes(it.id);
+                                    return (
+                                      <label key={it.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={(e) => {
+                                            const next = new Set(f.relatedItemIds || []);
+                                            if (e.target.checked) next.add(it.id);
+                                            else next.delete(it.id);
+                                            updateFaq(f.id, { relatedItemIds: Array.from(next) });
+                                          }}
+                                        />
+                                        <span className="truncate">{it.text}</span>
+                                      </label>
+                                    );
+                                  })}
+                              </div>
+                              <div className="mt-2 text-xs text-slate-500">
+                                Note: only the first 40 items show here to keep the UI fast. Use Export/Import if you want bulk editing.
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="no-print flex flex-col gap-2">
+                            <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveFaq(f.id,"up")}>Up</button>
+                            <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveFaq(f.id,"down")}>Down</button>
+                            <button className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100" onClick={()=>deleteFaq(f.id)}>Delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {!faqsFiltered.length ? (
+                      <div className="text-sm text-slate-600">No FAQ matches.</div>
+                    ) : null}
+                  </div>
+                </SectionCard>
+              </div>
+            ) : null}
+
+            {activeTab === "Edit Template" ? (
+              <div className="space-y-4">
+                <SectionCard
+                  title="Template Editor"
+                  right={
+                    <div className="flex items-center gap-2">
+                      <button className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800" onClick={addSection}>
+                        Add section
+                      </button>
+                    </div>
+                  }
+                >
+                  <div className="space-y-4">
+                    {sectionsSorted.map((sec) => (
+                      <div key={sec.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div className="flex-1">
+                            <label className="text-xs font-semibold text-slate-600">Section title</label>
+                            <input
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                              value={sec.title}
+                              onChange={(e)=>updateSection(sec.id, { title: e.target.value })}
+                            />
+                          </div>
+                          <div className="no-print flex flex-wrap gap-2">
+                            <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveSection(sec.id,"up")}>Up</button>
+                            <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveSection(sec.id,"down")}>Down</button>
+                            <button className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800" onClick={()=>addItemToSection(sec.id)}>
+                              Add item
+                            </button>
+                            <button className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100" onClick={()=>deleteSection(sec.id)}>
+                              Delete section
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 space-y-3">
+                          {(sec.items || [])
+                            .slice()
+                            .sort((a,b)=>a.order-b.order)
+                            .map((it) => (
+                              <div key={it.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                  <div className="flex-1">
+                                    <label className="text-xs font-semibold text-slate-600">Item text</label>
+                                    <input
+                                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                                      value={it.text}
+                                      onChange={(e)=>updateItem(sec.id, it.id, { text: e.target.value })}
+                                    />
+
+                                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                      <div>
+                                        <label className="text-xs font-semibold text-slate-600">Type</label>
+                                        <select
+                                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                                          value={it.type}
+                                          onChange={(e)=>updateItem(sec.id, it.id, { type: e.target.value })}
+                                        >
+                                          <option value="required">Required</option>
+                                          <option value="optional">Optional (not counted)</option>
+                                          <option value="info">Info (no checkbox)</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="text-xs font-semibold text-slate-600">Guidance (expand text)</label>
+                                        <textarea
+                                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                                          rows="2"
+                                          value={it.guidance || ""}
+                                          onChange={(e)=>updateItem(sec.id, it.id, { guidance: e.target.value })}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3">
+                                      <div className="flex items-center justify-between">
+                                        <div className="text-xs font-semibold text-slate-600">Sub-items</div>
+                                        <button
+                                          className="no-print rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+                                          onClick={()=>addSubItem(sec.id, it.id)}
+                                        >
+                                          Add sub-item
+                                        </button>
+                                      </div>
+
+                                      {Array.isArray(it.subitems) && it.subitems.length ? (
+                                        <div className="mt-2 space-y-2">
+                                          {it.subitems
+                                            .slice()
+                                            .sort((a,b)=>a.order-b.order)
+                                            .map((si) => (
+                                              <div key={si.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                                                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                                  <div className="flex-1">
+                                                    <label className="text-xs font-semibold text-slate-600">Sub-item text</label>
+                                                    <input
+                                                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                                                      value={si.text}
+                                                      onChange={(e)=>updateItem(sec.id, si.id, { text: e.target.value }, it.id)}
+                                                    />
+
+                                                    <div className="mt-2 grid gap-3 md:grid-cols-2">
+                                                      <div>
+                                                        <label className="text-xs font-semibold text-slate-600">Type</label>
+                                                        <select
+                                                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                                                          value={si.type}
+                                                          onChange={(e)=>updateItem(sec.id, si.id, { type: e.target.value }, it.id)}
+                                                        >
+                                                          <option value="required">Required</option>
+                                                          <option value="optional">Optional (not counted)</option>
+                                                          <option value="info">Info (no checkbox)</option>
+                                                        </select>
+                                                      </div>
+                                                      <div>
+                                                        <label className="text-xs font-semibold text-slate-600">Guidance</label>
+                                                        <textarea
+                                                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                                                          rows="2"
+                                                          value={si.guidance || ""}
+                                                          onChange={(e)=>updateItem(sec.id, si.id, { guidance: e.target.value }, it.id)}
+                                                        />
+                                                      </div>
+                                                    </div>
+                                                  </div>
+
+                                                  <div className="no-print flex flex-wrap gap-2">
+                                                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveItem(sec.id, si.id, "up", it.id)}>Up</button>
+                                                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveItem(sec.id, si.id, "down", it.id)}>Down</button>
+                                                    <button className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100" onClick={()=>deleteItem(sec.id, si.id, it.id)}>Delete</button>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ))}
+                                        </div>
+                                      ) : (
+                                        <div className="mt-2 text-sm text-slate-600">No sub-items.</div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="no-print flex flex-wrap gap-2">
+                                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveItem(sec.id, it.id, "up")}>Up</button>
+                                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>moveItem(sec.id, it.id, "down")}>Down</button>
+                                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100" onClick={()=>addSubItem(sec.id, it.id)}>Add sub-item</button>
+                                    <button className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100" onClick={()=>deleteItem(sec.id, it.id)}>Delete</button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          {!sec.items?.length ? (
+                            <div className="text-sm text-slate-600">No items in this section.</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              </div>
+            ) : null}
+
+            {activeTab === "Import/Export" ? (
+              <div className="space-y-4">
+                <SectionCard
+                  title="Import / Export"
+                  right={
+                    <div className="flex items-center gap-2">
+                      <button className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800" onClick={exportAll}>
+                        Export JSON
+                      </button>
+                      <button
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Import JSON file
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        onChange={(e)=> {
+                          const f = e.target.files?.[0];
+                          if (f) handleFilePick(f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </div>
+                  }
+                >
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Paste JSON bundle</label>
+                      <textarea
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
+                        rows="14"
+                        value={importText}
+                        onChange={(e)=>setImportText(e.target.value)}
+                        placeholder='{"template":{...},"runState":{...},"faq":{...}}'
+                      />
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                          onClick={()=>doImport(importText)}
+                        >
+                          Import
+                        </button>
+                        <button
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-100"
+                          onClick={()=>{ setImportText(""); setImportErrors([]); }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+
+                      {importErrors.length ? (
+                        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                          <div className="font-semibold">Import errors</div>
+                          <ul className="mt-1 list-disc pl-5">
+                            {importErrors.map((e,i)=><li key={i}>{e}</li>)}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Current bundle preview (read-only)</label>
+                      <pre className="mt-1 max-h-[360px] overflow-auto rounded-xl border border-slate-200 bg-slate-900 p-3 text-xs text-slate-100">
+                        {JSON.stringify({ template, runState, faq }, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                </SectionCard>
+              </div>
+            ) : null}
+
+            {activeTab === "Print" ? (
+              <div className="space-y-4">
+                <SectionCard
+                  title="Print"
+                  right={
+                    <button className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800" onClick={printNow}>
+                      Print / Save PDF
+                    </button>
+                  }
+                >
+                  <div className="text-sm text-slate-700">
+                    Use the button to open the browser print dialog. The printout includes checkmarks and notes.
+                  </div>
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                    Print includes:
+                    <ul className="list-disc pl-5">
+                      <li>Participant Name / ID / Date</li>
+                      <li>All checklist items, checkmarks, and notes</li>
+                    </ul>
+                  </div>
+                </SectionCard>
+              </div>
+            ) : null}
+
+            {/* Footer */}
+            <div className="no-print mt-8 text-xs text-slate-500">
+              Local-only tool. Data stays in this browser via localStorage.
+            </div>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
